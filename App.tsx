@@ -1,8 +1,8 @@
 
 import React, { useState, useRef } from 'react';
-import { StockMetadata, AppState } from './types';
-import { processImageMetadata } from './services/geminiService';
-import { embedMetadata } from './services/metadataService';
+import { StockMetadata, AppState } from './types.ts';
+import { processImageMetadata } from './services/geminiService.ts';
+import { embedMetadata } from './services/metadataService.ts';
 import piexif from "piexifjs";
 
 const CONCURRENCY_LIMIT = 3;
@@ -27,7 +27,6 @@ const App: React.FC = () => {
     
     const newFiles: (StockMetadata & { rawFile: File })[] = [];
     
-    // Explicitly cast to File[] to resolve TS unknown type inference issues
     for (const file of Array.from(e.target.files) as File[]) {
       const base64 = await fileToBase64(file);
       const dataUrl = `data:${file.type};base64,${base64}`;
@@ -35,7 +34,6 @@ const App: React.FC = () => {
       let initialPhotographer = globalPhotographer;
       let initialCreateDate = new Date().toISOString().slice(0, 16);
       
-      // Try to extract original metadata for JPEGs
       if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
         try {
           const exif = piexif.load(dataUrl);
@@ -44,7 +42,6 @@ const App: React.FC = () => {
           }
           if (exif['Exif'] && exif['Exif'][piexif.ExifIFD.DateTimeOriginal]) {
             const exifDate = exif['Exif'][piexif.ExifIFD.DateTimeOriginal];
-            // Format YYYY:MM:DD HH:MM:SS to YYYY-MM-DDTHH:MM
             initialCreateDate = exifDate.replace(/:/g, (m: string, i: number) => i < 10 ? '-' : m).replace(' ', 'T').slice(0, 16);
           }
         } catch (e) {
@@ -255,7 +252,6 @@ const App: React.FC = () => {
           updated[index].keywords = result.keywords;
           updated[index].caption = result.caption;
           updated[index].confidenceScore = result.confidenceScore;
-          // Keep photographer if already extracted from EXIF, otherwise use global
           if (!updated[index].photographer || updated[index].photographer === 'Daily Star Staff') {
             updated[index].photographer = globalPhotographer;
           }
