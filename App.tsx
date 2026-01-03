@@ -58,7 +58,7 @@ const App: React.FC = () => {
         creatorTool: 'TDS PhotoArchivePRO',
         createDate: initialCreateDate,
         modifyDate: new Date().toISOString().slice(0, 16),
-        rights: `Copyright © ${new Date().getFullYear()} The Daily Star`,
+        rights: `© ${initialPhotographer} / The Daily Star`,
         status: 'pending' as const,
         previewUrl: URL.createObjectURL(file),
         rawFile: file,
@@ -74,6 +74,11 @@ const App: React.FC = () => {
       const updated = [...prev];
       if (updated[index]) {
         (updated[index] as any)[field] = value;
+        
+        // Automatically sync copyright if photographer name changes
+        if (field === 'photographer') {
+          updated[index].rights = `© ${value} / The Daily Star`;
+        }
       }
       return updated;
     });
@@ -198,10 +203,13 @@ const App: React.FC = () => {
         rights: fileObj.rights
       }, fileObj.rawFile.type);
 
-      const ext = fileObj.rawFile.type.split('/')[1] || 'jpg';
+      // Final filename: Photographername_orgingalfilename.extention
+      const safePhotographer = fileObj.photographer.replace(/\s+/g, '');
+      const downloadName = `${safePhotographer}_${fileObj.filename}`;
+      
       const link = document.createElement("a");
       link.href = embeddedDataUrl;
-      link.download = `TDS_ARCHIVE_${fileObj.filename.replace(/\.[^/.]+$/, "")}.${ext}`;
+      link.download = downloadName;
       link.click();
 
       setFiles(prev => {
@@ -254,6 +262,7 @@ const App: React.FC = () => {
           updated[index].confidenceScore = result.confidenceScore;
           if (!updated[index].photographer || updated[index].photographer === 'Daily Star Staff') {
             updated[index].photographer = globalPhotographer;
+            updated[index].rights = `© ${globalPhotographer} / The Daily Star`;
           }
           updated[index].status = 'completed';
         }
@@ -450,7 +459,15 @@ const App: React.FC = () => {
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Generated Title</label><input type="text" value={file.title} onChange={(e) => updateField(idx, 'title', e.target.value)} className="w-full bg-slate-50 border-0 border-b-2 border-slate-100 p-0 py-1 text-sm font-black text-slate-900 focus:border-blue-700 outline-none transition-all" /></div>
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Creator Credit</label><input type="text" value={file.photographer} onChange={(e) => updateField(idx, 'photographer', e.target.value)} className="w-full bg-slate-50 border-0 border-b-2 border-slate-100 p-0 py-1 text-sm font-black text-slate-400 focus:border-blue-700 outline-none transition-all" /></div>
                           </div>
-                          <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Editorial Comment</label><textarea value={file.caption} onChange={(e) => updateField(idx, 'caption', e.target.value)} className="w-full bg-slate-50 border-0 border-b-2 border-slate-100 p-0 py-1 text-xs font-bold text-slate-800 leading-relaxed focus:border-blue-700 outline-none transition-all resize-none h-12" /></div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Editorial Comment (AP Style)</label>
+                            <textarea 
+                              value={file.caption} 
+                              onChange={(e) => updateField(idx, 'caption', e.target.value)} 
+                              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 leading-normal focus:border-blue-700 outline-none transition-all resize-none h-28" 
+                              placeholder="Full journalistic caption..."
+                            />
+                          </div>
 
                           <div className="border border-slate-100 rounded-2xl overflow-hidden">
                             <button onClick={() => setShowAdvanced(prev => ({ ...prev, [idx]: !isAdvancedOpen }))} className="w-full px-4 py-3 bg-slate-50 flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest hover:bg-slate-100 transition-colors">
