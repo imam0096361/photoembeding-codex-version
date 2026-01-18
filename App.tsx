@@ -1,11 +1,26 @@
 
 import React, { useState, useRef } from 'react';
-import { StockMetadata, AppState } from './types.ts';
-import { processImageMetadata } from './services/geminiService.ts';
+import { StockMetadata, AppState, CaptionStyle, CAPTION_STYLES, NewsCategory } from './types.ts';
+import { processImageMetadata, ProcessingOptions } from './services/geminiService.ts';
 import { embedMetadata } from './services/metadataService.ts';
+import { EVENT_TEMPLATES } from './data/eventTemplates.ts';
 import piexif from "piexifjs";
 
 const CONCURRENCY_LIMIT = 3;
+
+// Category colors for visual distinction
+const CATEGORY_COLORS: Record<NewsCategory, string> = {
+  politics: 'bg-red-100 text-red-700 border-red-200',
+  sports: 'bg-green-100 text-green-700 border-green-200',
+  entertainment: 'bg-purple-100 text-purple-700 border-purple-200',
+  business: 'bg-blue-100 text-blue-700 border-blue-200',
+  national: 'bg-amber-100 text-amber-700 border-amber-200',
+  international: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  lifestyle: 'bg-pink-100 text-pink-700 border-pink-200',
+  crime: 'bg-slate-100 text-slate-700 border-slate-200',
+  environment: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  technology: 'bg-cyan-100 text-cyan-700 border-cyan-200'
+};
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<(StockMetadata & { rawFile: File })[]>([]);
@@ -19,21 +34,26 @@ const App: React.FC = () => {
   const [isBatchArchiving, setIsBatchArchiving] = useState(false);
   const [showManifestMenu, setShowManifestMenu] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState<Record<number, boolean>>({});
-  
+  // NEW: Enhanced feature states
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>('ap');
+  const [highAccuracyMode, setHighAccuracyMode] = useState(false);
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
-    
+
     const newFiles: (StockMetadata & { rawFile: File })[] = [];
-    
+
     for (const file of Array.from(e.target.files) as File[]) {
       const base64 = await fileToBase64(file);
       const dataUrl = `data:${file.type};base64,${base64}`;
-      
+
       let initialPhotographer = globalPhotographer;
       let initialCreateDate = new Date().toISOString().slice(0, 16);
-      
+
       if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
         try {
           const exif = piexif.load(dataUrl);
@@ -74,7 +94,7 @@ const App: React.FC = () => {
       const updated = [...prev];
       if (updated[index]) {
         (updated[index] as any)[field] = value;
-        
+
         // Automatically sync copyright if photographer name changes
         if (field === 'photographer') {
           updated[index].rights = `© ${value} / The Daily Star`;
@@ -89,18 +109,18 @@ const App: React.FC = () => {
     const tagsToAdd = rawInput.split(',')
       .map(t => t.trim().toLowerCase().replace(/\s+/g, ''))
       .filter(t => t.length > 0);
-      
+
     if (tagsToAdd.length === 0) return;
 
     setFiles(prev => {
       const updated = [...prev];
       const currentTags = updated[fileIndex].keywords ? updated[fileIndex].keywords.split(',') : [];
       const newTags = [...currentTags];
-      
+
       tagsToAdd.forEach(tag => {
         if (!newTags.includes(tag)) newTags.push(tag);
       });
-      
+
       updated[fileIndex].keywords = newTags.join(',');
       return updated;
     });
@@ -132,7 +152,7 @@ const App: React.FC = () => {
       const updated = [...prev];
       const currentTags = updated[fileIndex].keywords.split(',');
       const targetIndex = direction === 'left' ? tagIndex - 1 : tagIndex + 1;
-      
+
       if (targetIndex >= 0 && targetIndex < currentTags.length) {
         const temp = currentTags[tagIndex];
         currentTags[tagIndex] = currentTags[targetIndex];
@@ -156,7 +176,7 @@ const App: React.FC = () => {
     if (!editingTag) return;
     const { fileIdx, tagIdx, value } = editingTag;
     const cleanValue = value.trim().toLowerCase().replace(/\s+/g, '');
-    
+
     setFiles(prev => {
       const updated = [...prev];
       const currentTags = updated[fileIdx].keywords.split(',');
@@ -206,7 +226,7 @@ const App: React.FC = () => {
       // Final filename: Photographername_orgingalfilename.extention
       const safePhotographer = fileObj.photographer.replace(/\s+/g, '');
       const downloadName = `${safePhotographer}_${fileObj.filename}`;
-      
+
       const link = document.createElement("a");
       link.href = embeddedDataUrl;
       link.download = downloadName;
@@ -251,7 +271,15 @@ const App: React.FC = () => {
     try {
       const fileObj = files[index];
       const base64 = await fileToBase64(fileObj.rawFile);
-      const result = await processImageMetadata(base64, fileObj.rawFile.type, userNotes);
+
+      // Build processing options with new features
+      const options: ProcessingOptions = {
+        captionStyle,
+        templateId: selectedTemplate || undefined,
+        highAccuracyMode
+      };
+
+      const result = await processImageMetadata(base64, fileObj.rawFile.type, userNotes, options);
 
       setFiles(prev => {
         const updated = [...prev];
@@ -260,6 +288,14 @@ const App: React.FC = () => {
           updated[index].keywords = result.keywords;
           updated[index].caption = result.caption;
           updated[index].confidenceScore = result.confidenceScore;
+          // NEW: Store enhanced metadata
+          updated[index].category = result.category;
+          updated[index].extractedText = result.extractedText;
+          updated[index].identifiedFigures = result.identifiedFigures;
+          updated[index].verificationNotes = result.verificationNotes;
+          updated[index].quality = result.quality;
+          updated[index].suggestedKeywords = result.suggestedKeywords;
+
           if (!updated[index].photographer || updated[index].photographer === 'Daily Star Staff') {
             updated[index].photographer = globalPhotographer;
             updated[index].rights = `© ${globalPhotographer} / The Daily Star`;
@@ -277,6 +313,7 @@ const App: React.FC = () => {
         }
         return updated;
       });
+
     } finally {
       setActiveJobs(prev => prev - 1);
     }
@@ -360,7 +397,7 @@ const App: React.FC = () => {
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">The Daily Star Press Engine</p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-3">
           {anyCompleted && (
             <>
@@ -378,7 +415,7 @@ const App: React.FC = () => {
                   <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-100 rounded-xl shadow-2xl py-2 z-50 overflow-hidden ring-4 ring-slate-900/5">
                     <button onClick={exportCSV} className="w-full px-4 py-3 text-left text-xs font-black text-slate-600 hover:bg-slate-50 hover:text-blue-700 transition-colors flex items-center gap-3"><div className="w-6 h-6 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400">CSV</div>EXCEL / DATA SHEET</button>
                     <button onClick={exportJSON} className="w-full px-4 py-3 text-left text-xs font-black text-slate-600 hover:bg-slate-50 hover:text-blue-700 transition-colors flex items-center gap-3"><div className="w-6 h-6 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400">JSON</div>DEVELOPER FORMAT</button>
-                    <button onClick={exportPressSheet} className="w-full px-4 py-3 text-left text-xs font-black text-slate-600 hover:bg-slate-50 hover:text-blue-700 transition-colors flex items-center gap-3 border-t border-slate-50"><div className="w-6 h-6 bg-blue-50 rounded-lg flex items-center justify-center text-blue-400"><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14h-7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg></div>PRESS SUMMARY (TXT)</button>
+                    <button onClick={exportPressSheet} className="w-full px-4 py-3 text-left text-xs font-black text-slate-600 hover:bg-slate-50 hover:text-blue-700 transition-colors flex items-center gap-3 border-t border-slate-50"><div className="w-6 h-6 bg-blue-50 rounded-lg flex items-center justify-center text-blue-400"><svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14h-7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" /></svg></div>PRESS SUMMARY (TXT)</button>
                   </div>
                 )}
               </div>
@@ -402,7 +439,60 @@ const App: React.FC = () => {
             </div>
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 block">Project Scenario</label>
-              <textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)} placeholder="Location, Event Name, Guest Names..." className="w-full h-32 px-4 py-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-700/20 focus:border-blue-700 outline-none transition-all resize-none" />
+              <textarea value={userNotes} onChange={(e) => setUserNotes(e.target.value)} placeholder="Location, Event Name, Guest Names..." className="w-full h-24 px-4 py-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-700/20 focus:border-blue-700 outline-none transition-all resize-none" />
+            </div>
+
+            {/* NEW: Event Template Selector */}
+            <div className="relative">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 block">Event Template</label>
+              <button
+                onClick={() => setShowTemplateMenu(!showTemplateMenu)}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-left flex justify-between items-center hover:border-blue-400 transition-all"
+              >
+                <span className={selectedTemplate ? 'text-slate-900' : 'text-slate-400'}>
+                  {selectedTemplate ? EVENT_TEMPLATES.find(t => t.id === selectedTemplate)?.name : 'Select template (optional)'}
+                </span>
+                <svg className={`w-4 h-4 transition-transform ${showTemplateMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {showTemplateMenu && (
+                <div className="absolute z-50 w-full mt-2 bg-white border border-slate-100 rounded-xl shadow-2xl max-h-64 overflow-y-auto">
+                  <button onClick={() => { setSelectedTemplate(''); setShowTemplateMenu(false); }} className="w-full px-4 py-2 text-left text-xs font-bold text-slate-400 hover:bg-slate-50">None (Auto-detect)</button>
+                  {EVENT_TEMPLATES.map(t => (
+                    <button key={t.id} onClick={() => { setSelectedTemplate(t.id); setShowTemplateMenu(false); }} className="w-full px-4 py-2 text-left text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 border-t border-slate-50">
+                      <span className="block">{t.name}</span>
+                      <span className="text-[9px] text-slate-400">{t.description}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* NEW: Caption Style Selector */}
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 block">Caption Style</label>
+              <select
+                value={captionStyle}
+                onChange={(e) => setCaptionStyle(e.target.value as CaptionStyle)}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-700/20 focus:border-blue-700 outline-none transition-all"
+              >
+                {CAPTION_STYLES.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} - {s.description}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* NEW: High Accuracy Mode Toggle */}
+            <div className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl">
+              <div>
+                <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest block">High Accuracy Mode</span>
+                <span className="text-[9px] text-amber-600">Deeper AI analysis, slower</span>
+              </div>
+              <button
+                onClick={() => setHighAccuracyMode(!highAccuracyMode)}
+                className={`w-12 h-6 rounded-full transition-all ${highAccuracyMode ? 'bg-amber-500' : 'bg-slate-200'}`}
+              >
+                <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${highAccuracyMode ? 'translate-x-6' : 'translate-x-0.5'}`} />
+              </button>
             </div>
             <button onClick={startProcessing} disabled={isProcessing || files.length === 0} className="w-full py-4 bg-blue-800 hover:bg-blue-900 disabled:bg-slate-200 text-white font-black text-sm rounded-xl shadow-xl shadow-blue-100 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">
               {isProcessing ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />ANALYZING...</> : <><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>PROCESS BATCH</>}
@@ -432,9 +522,9 @@ const App: React.FC = () => {
               const allTags = file.keywords ? file.keywords.split(',').filter(t => t.length > 0) : [];
               const filter = tagFilters[idx] || '';
               const filteredTags = allTags.map((tag, i) => ({ tag, originalIdx: i }))
-                                         .filter(({ tag }) => tag.toLowerCase().includes(filter.toLowerCase()));
+                .filter(({ tag }) => tag.toLowerCase().includes(filter.toLowerCase()));
               const isAdvancedOpen = showAdvanced[idx] || false;
-              
+
               return (
                 <div key={idx} className={`bg-white rounded-[2rem] border overflow-hidden transition-all duration-500 shadow-sm ${file.status === 'processing' ? 'border-blue-500 ring-8 ring-blue-50 shadow-xl scale-[1.01]' : 'border-slate-200 hover:shadow-lg'}`}>
                   <div className="flex flex-col md:flex-row">
@@ -455,16 +545,58 @@ const App: React.FC = () => {
                     <div className="flex-1 p-8 space-y-6">
                       {file.status === 'completed' || file.status === 'embedding' ? (
                         <>
+                          {/* NEW: Category Badge & Quality Indicators */}
+                          <div className="flex flex-wrap items-center gap-2 mb-4">
+                            {file.category && (
+                              <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${CATEGORY_COLORS[file.category] || 'bg-slate-100 text-slate-600'}`}>
+                                {file.category}
+                              </span>
+                            )}
+                            {file.quality && (
+                              <span className={`px-2 py-1 rounded-lg text-[8px] font-bold ${file.quality.printReady ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
+                                {file.quality.sharpness} quality • {file.quality.exposure}
+                              </span>
+                            )}
+                            {file.identifiedFigures && file.identifiedFigures.length > 0 && (
+                              <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[8px] font-bold">
+                                {file.identifiedFigures.length} person(s) identified
+                              </span>
+                            )}
+                          </div>
+
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Generated Title</label><input type="text" value={file.title} onChange={(e) => updateField(idx, 'title', e.target.value)} className="w-full bg-slate-50 border-0 border-b-2 border-slate-100 p-0 py-1 text-sm font-black text-slate-900 focus:border-blue-700 outline-none transition-all" /></div>
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Creator Credit</label><input type="text" value={file.photographer} onChange={(e) => updateField(idx, 'photographer', e.target.value)} className="w-full bg-slate-50 border-0 border-b-2 border-slate-100 p-0 py-1 text-sm font-black text-slate-400 focus:border-blue-700 outline-none transition-all" /></div>
                           </div>
+
+                          {/* NEW: Identified Figures Display */}
+                          {file.identifiedFigures && file.identifiedFigures.length > 0 && (
+                            <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
+                              <label className="text-[9px] font-black text-blue-600 uppercase tracking-widest block mb-2">AI-Identified Figures</label>
+                              <div className="flex flex-wrap gap-2">
+                                {file.identifiedFigures.map((figure, i) => (
+                                  <span key={i} className="px-2 py-1 bg-white border border-blue-200 rounded-lg text-[10px] font-bold text-blue-800">{figure}</span>
+                                ))}
+                              </div>
+                              {file.verificationNotes && (
+                                <p className="mt-2 text-[9px] text-blue-500 italic">{file.verificationNotes.slice(0, 200)}...</p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* NEW: Extracted Text Display */}
+                          {file.extractedText && (
+                            <div className="p-3 bg-amber-50/50 border border-amber-100 rounded-xl">
+                              <label className="text-[9px] font-black text-amber-600 uppercase tracking-widest block mb-1">Extracted Text (OCR)</label>
+                              <p className="text-[10px] font-medium text-amber-800">"{file.extractedText}"</p>
+                            </div>
+                          )}
                           <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Editorial Comment (AP Style)</label>
-                            <textarea 
-                              value={file.caption} 
-                              onChange={(e) => updateField(idx, 'caption', e.target.value)} 
-                              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 leading-normal focus:border-blue-700 outline-none transition-all resize-none h-28" 
+                            <textarea
+                              value={file.caption}
+                              onChange={(e) => updateField(idx, 'caption', e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 leading-normal focus:border-blue-700 outline-none transition-all resize-none h-28"
                               placeholder="Full journalistic caption..."
                             />
                           </div>
@@ -505,7 +637,7 @@ const App: React.FC = () => {
                                 </div>
                               </div>
                             </div>
-                            
+
                             <div className="flex flex-wrap gap-2 max-h-56 overflow-y-auto p-4 bg-slate-50/50 rounded-3xl border border-slate-100 shadow-inner custom-scrollbar">
                               {filteredTags.map(({ tag, originalIdx }) => (
                                 <div key={originalIdx} className={`group relative flex items-center rounded-xl px-3 py-2 transition-all border shadow-sm ${editingTag?.tagIdx === originalIdx ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-100' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
@@ -514,7 +646,7 @@ const App: React.FC = () => {
                                   ) : (
                                     <span onClick={() => setEditingTag({ fileIdx: idx, tagIdx: originalIdx, value: tag })} className="text-[10px] font-black text-slate-700 cursor-text select-none">#{tag}</span>
                                   )}
-                                  
+
                                   <div className="flex items-center ml-3 pl-2 border-l border-slate-100 gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={() => moveTag(idx, originalIdx, 'left')} className="p-1 hover:bg-blue-50 rounded text-slate-400 hover:text-blue-700 transition-colors"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg></button>
                                     <button onClick={() => moveTag(idx, originalIdx, 'right')} className="p-1 hover:bg-blue-50 rounded text-slate-400 hover:text-blue-700 transition-colors"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg></button>
