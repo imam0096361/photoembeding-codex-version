@@ -83,12 +83,11 @@ Categorize this image into EXACTLY ONE news desk:
 EDITORIAL COMMENT (CAPTION) REQUIREMENTS
 ═══════════════════════════════════════════════════════════════════
 
-DEFAULT AP STYLE:
-- Generate a comprehensive journalistic caption. 2-3 sentences.
-- SENTENCE 1: Describe who is in the photo and what is happening in the present tense.
-- SENTENCE 2+: Provide context, significance, or background.
-- Tone: Formal, objective, and neutral.
-- Include date/location if inferable or provided.
+STYLE ENFORCEMENT:
+- Generate a comprehensive, professional caption based exactly on the requested style.
+- PAY STRICT ATTENTION to the "CAPTION STYLE OVERRIDE" in the user prompt.
+- If no style is specified, default to neutral, formal journalistic language.
+- Include date/location/significance if inferable or provided.
 - Do NOT use a period at the very end of the final sentence.
 
 ═══════════════════════════════════════════════════════════════════

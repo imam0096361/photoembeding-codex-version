@@ -1,7 +1,7 @@
 
 export type NewsCategory = 'politics' | 'sports' | 'entertainment' | 'business' | 'national' | 'international' | 'lifestyle' | 'crime' | 'environment' | 'technology';
 
-export type CaptionStyle = 'ap' | 'social' | 'wire' | 'magazine' | 'archive';
+export type CaptionStyle = 'ap' | 'social' | 'wire' | 'magazine' | 'archive' | 'teach';
 
 export type ImageQuality = 'excellent' | 'good' | 'acceptable' | 'poor';
 
@@ -118,8 +118,14 @@ export const CAPTION_STYLES: CaptionStyleConfig[] = [
   },
   {
     id: 'archive',
-    name: 'Archive',
-    description: 'Detailed, historical context',
-    promptModifier: 'Write for historical archive: detailed, include full names, titles, historical significance, and precise context.'
+    name: 'Historical Archive',
+    description: 'Detailed, context for old Daily Star photos',
+    promptModifier: 'Write for a historical newspaper archive. Identify key figures with full names and historical titles. Note the significance of the event in history. Use past tense appropriately. Be highly factual and descriptive.'
+  },
+  {
+    id: 'teach',
+    name: 'Educational / Deep Think',
+    description: 'Deep context, educational breakdown',
+    promptModifier: 'Think deeply like a historian and photojournalist teaching a student. Explain the context, why this moment matters, visual elements of significance, and the broader societal impact. Write in a compelling, educational tone. Break down the historical narrative into 3-4 comprehensive sentences.'
   }
 ];

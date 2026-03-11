@@ -39,15 +39,26 @@ const App: React.FC = () => {
   const [captionStyle, setCaptionStyle] = useState<CaptionStyle>('ap');
   const [highAccuracyMode, setHighAccuracyMode] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [copiedField, setCopiedField] = useState<{ fileIdx: number, field: string } | null>(null);
+
+  const handleCopy = async (text: string, fileIdx: number, field: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField({ fileIdx, field });
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-
+  const processFiles = async (fileList: File[]) => {
     const newFiles: (StockMetadata & { rawFile: File })[] = [];
 
-    for (const file of Array.from(e.target.files) as File[]) {
+    for (const file of fileList) {
       const base64 = await fileToBase64(file);
       const dataUrl = `data:${file.type};base64,${base64}`;
 
@@ -87,6 +98,32 @@ const App: React.FC = () => {
     }
 
     setFiles(prev => [...prev, ...newFiles]);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    await processFiles(Array.from(e.target.files));
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+
+    const droppedFiles = (Array.from(e.dataTransfer.files) as File[]).filter(file => file.type.startsWith('image/'));
+    if (droppedFiles.length > 0) {
+      await processFiles(droppedFiles);
+    }
   };
 
   const updateField = (index: number, field: keyof StockMetadata, value: any) => {
@@ -510,9 +547,18 @@ const App: React.FC = () => {
 
         <section className="lg:col-span-3 space-y-6">
           {isIdle && files.length === 0 && (
-            <div onClick={() => fileInputRef.current?.click()} className="h-[400px] border-4 border-dashed border-slate-200 rounded-[2.5rem] bg-white flex flex-col items-center justify-center gap-6 group cursor-pointer hover:border-blue-700 transition-all">
-              <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 group-hover:bg-blue-50 group-hover:text-blue-700 group-hover:rotate-12 transition-all shadow-inner"><svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg></div>
-              <div className="text-center"><h3 className="text-2xl font-black text-slate-900 uppercase">Ingest Press Archive</h3><p className="text-slate-400 font-bold text-sm mt-1 uppercase tracking-widest">Supports all image formats (JPG, PNG, WebP)</p></div>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`h-[400px] border-4 border-dashed rounded-[2.5rem] flex flex-col items-center justify-center gap-6 group cursor-pointer transition-all ${isDragging ? 'border-blue-500 bg-blue-50/50 shadow-inner' : 'border-slate-200 bg-white hover:border-blue-700'}`}
+            >
+              <div className={`w-24 h-24 rounded-full flex items-center justify-center transition-all shadow-inner ${isDragging ? 'bg-blue-100 text-blue-700 rotate-12 scale-110' : 'bg-slate-50 text-slate-300 group-hover:bg-blue-50 group-hover:text-blue-700 group-hover:rotate-12'}`}><svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg></div>
+              <div className="text-center">
+                <h3 className="text-2xl font-black text-slate-900 uppercase">{isDragging ? 'Drop Images Here' : 'Ingest Press Archive'}</h3>
+                <p className="text-slate-400 font-bold text-sm mt-1 uppercase tracking-widest">Supports all image formats (JPG, PNG, WebP)</p>
+              </div>
               <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
             </div>
           )}
@@ -591,12 +637,25 @@ const App: React.FC = () => {
                               <p className="text-[10px] font-medium text-amber-800">"{file.extractedText}"</p>
                             </div>
                           )}
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Editorial Comment (AP Style)</label>
+                          <div className="space-y-0">
+                            <div className="flex justify-between items-center bg-slate-50 border border-slate-100 border-b-0 rounded-t-xl px-4 py-2">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Editorial Comment (AP Style)</label>
+                              <button
+                                onClick={() => handleCopy(file.caption, idx, 'caption')}
+                                className="flex items-center gap-1 text-[9px] font-black uppercase transition-colors p-1 rounded hover:bg-slate-200"
+                                title="Copy Caption"
+                              >
+                                {copiedField?.fileIdx === idx && copiedField?.field === 'caption' ? (
+                                  <span className="text-green-600 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg> COPIED</span>
+                                ) : (
+                                  <span className="text-slate-400 hover:text-blue-600 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg> COPY</span>
+                                )}
+                              </button>
+                            </div>
                             <textarea
                               value={file.caption}
                               onChange={(e) => updateField(idx, 'caption', e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 leading-normal focus:border-blue-700 outline-none transition-all resize-none h-28"
+                              className="w-full bg-slate-50 border border-slate-100 rounded-b-xl px-4 py-3 text-xs font-bold text-slate-800 leading-normal focus:border-blue-700 outline-none transition-all resize-none h-28 focus:shadow-inner"
                               placeholder="Full journalistic caption..."
                             />
                           </div>
@@ -621,6 +680,17 @@ const App: React.FC = () => {
                               <div className="flex items-center gap-3">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Archive Tags</label>
                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${allTags.length >= 40 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{allTags.length}/40</span>
+                                <button
+                                  onClick={() => handleCopy(file.keywords, idx, 'tags')}
+                                  className="flex items-center gap-1 text-[9px] font-black uppercase transition-colors px-2 py-1 rounded bg-slate-50 hover:bg-slate-200 border border-slate-100 shadow-sm"
+                                  title="Copy All Tags"
+                                >
+                                  {copiedField?.fileIdx === idx && copiedField?.field === 'tags' ? (
+                                    <span className="text-green-600 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg> COPIED</span>
+                                  ) : (
+                                    <span className="text-slate-400 hover:text-blue-600 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg> COPY</span>
+                                  )}
+                                </button>
                                 <div className="flex gap-2">
                                   <button onClick={() => sortTags(idx)} className="text-[9px] font-black text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded uppercase transition-colors flex items-center gap-1 shadow-sm"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" /></svg>Sort A-Z</button>
                                   <button onClick={() => clearTags(idx)} className="text-[9px] font-black text-red-600 bg-red-50 hover:bg-red-100 px-2 py-1 rounded uppercase transition-colors flex items-center gap-1 shadow-sm"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>Clear All</button>
