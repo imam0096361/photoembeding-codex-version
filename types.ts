@@ -1,4 +1,3 @@
-
 export type NewsCategory = 'politics' | 'sports' | 'entertainment' | 'business' | 'national' | 'international' | 'lifestyle' | 'crime' | 'environment' | 'technology';
 
 export type CaptionStyle = 'ap' | 'social' | 'wire' | 'magazine' | 'archive' | 'teach';
@@ -18,7 +17,8 @@ export interface StockMetadata {
   filename: string;
   title: string;
   keywords: string;
-  caption: string;
+  wireCaption: string;
+  archivalDescription: string;
   photographer: string;
   // Archival / Advanced fields
   creatorTool?: string;
@@ -45,7 +45,8 @@ export interface StockMetadata {
 export interface ProcessingResult {
   title: string;
   keywords: string;
-  caption: string;
+  wireCaption: string;
+  archivalDescription: string;
   confidenceScore: number;
   // NEW: Enhanced result fields
   category: NewsCategory;
@@ -83,50 +84,3 @@ export interface KnownFigure {
   visualCues?: string[];
   category: 'politics' | 'sports' | 'entertainment' | 'business' | 'other';
 }
-
-// Caption Style Configuration
-export interface CaptionStyleConfig {
-  id: CaptionStyle;
-  name: string;
-  description: string;
-  promptModifier: string;
-}
-
-export const CAPTION_STYLES: CaptionStyleConfig[] = [
-  {
-    id: 'ap',
-    name: 'AP Style',
-    description: 'Formal, objective, present tense (Standard)',
-    promptModifier: 'Write in AP Style: formal, objective, present tense. 2-3 sentences.'
-  },
-  {
-    id: 'social',
-    name: 'Social Media',
-    description: 'Shorter, engaging, hashtag-ready',
-    promptModifier: 'Write for social media: concise, engaging, under 280 characters. Include 2-3 relevant hashtags.'
-  },
-  {
-    id: 'wire',
-    name: 'Wire Service',
-    description: 'Ultra-compact, facts-only',
-    promptModifier: 'Write wire service style: maximum 1 sentence, essential facts only, location and date format.'
-  },
-  {
-    id: 'magazine',
-    name: 'Magazine',
-    description: 'More descriptive, contextual',
-    promptModifier: 'Write magazine style: descriptive, contextual, can be 3-4 sentences with rich detail.'
-  },
-  {
-    id: 'archive',
-    name: 'Historical Archive',
-    description: 'Detailed, context for old Daily Star photos',
-    promptModifier: 'Write for a historical newspaper archive. Identify key figures with full names and historical titles. Note the significance of the event in history. Use past tense appropriately. Be highly factual and descriptive.'
-  },
-  {
-    id: 'teach',
-    name: 'Educational / Deep Think',
-    description: 'Deep context, educational breakdown',
-    promptModifier: 'Think deeply like a historian and photojournalist teaching a student. Explain the context, why this moment matters, visual elements of significance, and the broader societal impact. Write in a compelling, educational tone. Break down the historical narrative into 3-4 comprehensive sentences.'
-  }
-];

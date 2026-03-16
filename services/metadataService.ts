@@ -32,7 +32,8 @@ export async function embedMetadata(
   base64Data: string,
   metadata: { 
     title: string; 
-    caption: string; 
+    wireCaption: string; 
+    archivalDescription: string; 
     keywords: string; 
     photographer: string;
     creatorTool?: string;
@@ -44,7 +45,8 @@ export async function embedMetadata(
 ): Promise<string> {
   const cleanMeta = {
     title: (metadata.title || "").trim().replace(/\r?\n|\r/g, " "),
-    caption: (metadata.caption || "").trim().replace(/\r?\n|\r/g, " "),
+    wireCaption: (metadata.wireCaption || "").trim().replace(/\r?\n|\r/g, " "),
+    archivalDescription: (metadata.archivalDescription || "").trim().replace(/\r?\n|\r/g, " "),
     keywords: (metadata.keywords || "").trim(),
     photographer: (metadata.photographer || "").trim(),
     creatorTool: (metadata.creatorTool || "TDS PhotoArchivePRO").trim(),
@@ -101,7 +103,7 @@ function createExifData(metadata: any): any {
   const exif: any = {};
 
   // Standard Image IFD0 - Always use plain strings for these standard tags
-  zeroth[piexif.ImageIFD.ImageDescription] = metadata.caption;
+  zeroth[piexif.ImageIFD.ImageDescription] = metadata.wireCaption;
   zeroth[piexif.ImageIFD.Artist] = metadata.photographer;
   zeroth[piexif.ImageIFD.Software] = metadata.creatorTool;
   zeroth[piexif.ImageIFD.Copyright] = metadata.rights;
@@ -111,11 +113,11 @@ function createExifData(metadata: any): any {
   zeroth[TAG_XP_TITLE] = toWcharByteList(metadata.title);
   zeroth[TAG_XP_AUTHOR] = toWcharByteList(metadata.photographer);
   zeroth[TAG_XP_KEYWORDS] = toWcharByteList(winKeywords);
-  zeroth[TAG_XP_COMMENT] = toWcharByteList(metadata.caption);
+  zeroth[TAG_XP_COMMENT] = toWcharByteList(metadata.wireCaption);
   zeroth[TAG_XP_SUBJECT] = toWcharByteList(metadata.title);
 
   // Exif IFD
-  exif[piexif.ExifIFD.UserComment] = "ASCII\0\0\0" + metadata.caption;
+  exif[piexif.ExifIFD.UserComment] = "ASCII\0\0\0" + metadata.archivalDescription;
   
   // High-precision Date Formatting (Exif standard is YYYY:MM:DD HH:MM:SS)
   const formatExifDate = (isoDate: string) => {
@@ -161,7 +163,7 @@ function createXmpPacket(metadata: any): string {
     xmp:CreateDate="${metadata.createDate}"
     xmp:ModifyDate="${metadata.modifyDate}">
    <dc:title><rdf:Alt><rdf:li xml:lang="x-default">${esc(metadata.title)}</rdf:li></rdf:Alt></dc:title>
-   <dc:description><rdf:Alt><rdf:li xml:lang="x-default">${esc(metadata.caption)}</rdf:li></rdf:Alt></dc:description>
+   <dc:description><rdf:Alt><rdf:li xml:lang="x-default">${esc(metadata.archivalDescription)}</rdf:li></rdf:Alt></dc:description>
    <dc:creator><rdf:Seq><rdf:li>${esc(metadata.photographer)}</rdf:li></rdf:Seq></dc:creator>
    <dc:subject><rdf:Bag>${tags}</rdf:Bag></dc:subject>
    <dc:rights><rdf:Alt><rdf:li xml:lang="x-default">${esc(metadata.rights)}</rdf:li></rdf:Alt></dc:rights>
@@ -230,7 +232,7 @@ function embedInPng(bytes: Uint8Array, metadata: any, xmp: string): string {
   const chunksToAdd = [
     { key: "Title", value: metadata.title },
     { key: "Author", value: metadata.photographer },
-    { key: "Description", value: metadata.caption },
+    { key: "Description", value: metadata.archivalDescription },
     { key: "Keywords", value: metadata.keywords },
     { key: "XML:com.adobe.xmp", value: xmp }
   ];

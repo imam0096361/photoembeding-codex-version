@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { StockMetadata, AppState, CaptionStyle, CAPTION_STYLES, NewsCategory } from './types.ts';
+import { StockMetadata, AppState, NewsCategory } from './types.ts';
 import { processImageMetadata, ProcessingOptions } from './services/geminiService.ts';
 import { embedMetadata } from './services/metadataService.ts';
 import { EVENT_TEMPLATES } from './data/eventTemplates.ts';
@@ -53,7 +53,6 @@ const App: React.FC = () => {
   const [showAdvanced, setShowAdvanced] = useState<Record<number, boolean>>({});
   // NEW: Enhanced feature states
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
-  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>('ap');
   const [highAccuracyMode, setHighAccuracyMode] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -101,7 +100,8 @@ const App: React.FC = () => {
         filename: file.name,
         title: '',
         keywords: 'The Daily Star, Bangladesh, Bangladeshi',
-        caption: '',
+        wireCaption: '',
+        archivalDescription: '',
         photographer: initialPhotographer,
         creatorTool: 'TDS PhotoArchivePRO',
         createDate: initialCreateDate,
@@ -304,7 +304,8 @@ const App: React.FC = () => {
       const base64 = await fileToBase64(fileObj.rawFile);
       const embeddedDataUrl = await embedMetadata(base64, {
         title: fileObj.title,
-        caption: fileObj.caption,
+        wireCaption: fileObj.wireCaption,
+        archivalDescription: fileObj.archivalDescription,
         keywords: fileObj.keywords,
         photographer: fileObj.photographer,
         creatorTool: fileObj.creatorTool,
@@ -364,7 +365,6 @@ const App: React.FC = () => {
 
       // Build processing options with new features
       const options: ProcessingOptions = {
-        captionStyle,
         templateId: selectedTemplate || undefined,
         highAccuracyMode
       };
@@ -382,7 +382,9 @@ const App: React.FC = () => {
           const mergedTags = Array.from(new Set([...baseTags, ...generatedTags]));
           updated[index].keywords = mergedTags.join(',');
           
-          updated[index].caption = result.caption;
+          updated[index].wireCaption = result.wireCaption;
+          updated[index].archivalDescription = result.archivalDescription;
+          
           updated[index].confidenceScore = result.confidenceScore;
           // NEW: Store enhanced metadata
           updated[index].category = result.category;
@@ -435,14 +437,14 @@ const App: React.FC = () => {
   const exportCSV = () => {
     const completedFiles = files.filter(f => f.status === 'completed');
     if (completedFiles.length === 0) return;
-    const header = "filename,title,tags,comment,photographer,confidence,creatorTool,rights\n";
-    const rows = completedFiles.map(f => `"${f.filename}","${f.title.replace(/"/g, '""')}","${f.keywords}","${f.caption.replace(/"/g, '""')}","${f.photographer}",${f.confidenceScore},"${f.creatorTool}","${f.rights}"`).join("\n");
+    const header = "filename,title,tags,wireCaption,archivalDescription,photographer,confidence,creatorTool,rights\n";
+    const rows = completedFiles.map(f => `"${f.filename}","${f.title.replace(/"/g, '""')}","${f.keywords}","${f.wireCaption.replace(/"/g, '""')}","${f.archivalDescription.replace(/"/g, '""')}","${f.photographer}",${f.confidenceScore},"${f.creatorTool}","${f.rights}"`).join("\n");
     downloadFile(header + rows, `tds_manifest_${getTimestamp()}.csv`, 'text/csv');
   };
 
   const exportJSON = () => {
     const completedFiles = files.filter(f => f.status === 'completed').map(f => ({
-      filename: f.filename, title: f.title, tags: f.keywords.split(','), editorialComment: f.caption,
+      filename: f.filename, title: f.title, tags: f.keywords.split(','), wireCaption: f.wireCaption, archivalDescription: f.archivalDescription,
       photographer: f.photographer, confidence: f.confidenceScore, archival: { creatorTool: f.creatorTool, createDate: f.createDate, modifyDate: f.modifyDate, rights: f.rights }
     }));
     if (completedFiles.length === 0) return;
@@ -454,7 +456,7 @@ const App: React.FC = () => {
     if (completedFiles.length === 0) return;
     let content = `THE DAILY STAR - PHOTO ARCHIVE PRESS SHEET\nBATCH DATE: ${new Date().toLocaleDateString()}\nTOTAL ASSETS: ${completedFiles.length}\n------------------------------------------------------------\n\n`;
     completedFiles.forEach((f, idx) => {
-      content += `${idx + 1}. FILENAME: ${f.filename}\n   TITLE: ${f.title}\n   CREDIT: ${f.photographer}\n   CAPTION: ${f.caption}\n   TAGS: ${f.keywords}\n   AI CONFIDENCE: ${f.confidenceScore}%\n   RIGHTS: ${f.rights}\n\n`;
+      content += `${idx + 1}. FILENAME: ${f.filename}\n   TITLE: ${f.title}\n   CREDIT: ${f.photographer}\n   WIRE CAPTION (AP): ${f.wireCaption}\n   ARCHIVAL DESCRIPTION: ${f.archivalDescription}\n   TAGS: ${f.keywords}\n   AI CONFIDENCE: ${f.confidenceScore}%\n   RIGHTS: ${f.rights}\n\n`;
     });
     content += `------------------------------------------------------------\nGenerated by TDS PhotoArchivePRO | Engineered by Imam Chowdhury\n`;
     downloadFile(content, `tds_press_sheet_${getTimestamp()}.txt`, 'text/plain');
@@ -561,20 +563,6 @@ const App: React.FC = () => {
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* NEW: Caption Style Selector */}
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 block">Caption Style</label>
-              <select
-                value={captionStyle}
-                onChange={(e) => setCaptionStyle(e.target.value as CaptionStyle)}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-700/20 focus:border-blue-700 outline-none transition-all"
-              >
-                {CAPTION_STYLES.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} - {s.description}</option>
-                ))}
-              </select>
             </div>
 
             {/* NEW: High Accuracy Mode Toggle */}
@@ -704,27 +692,53 @@ const App: React.FC = () => {
                               <p className="text-[10px] font-medium text-amber-800">"{file.extractedText}"</p>
                             </div>
                           )}
-                          <div className="space-y-0">
-                            <div className="flex justify-between items-center bg-slate-50 border border-slate-100 border-b-0 rounded-t-xl px-4 py-2">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Editorial Comment (AP Style)</label>
-                              <button
-                                onClick={() => handleCopy(file.caption, idx, 'caption')}
-                                className="flex items-center gap-1 text-[9px] font-black uppercase transition-colors p-1 rounded hover:bg-slate-200"
-                                title="Copy Caption"
-                              >
-                                {copiedField?.fileIdx === idx && copiedField?.field === 'caption' ? (
-                                  <span className="text-green-600 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg> COPIED</span>
-                                ) : (
-                                  <span className="text-slate-400 hover:text-blue-600 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg> COPY</span>
-                                )}
-                              </button>
+                          
+                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                            <div className="space-y-0">
+                              <div className="flex justify-between items-center bg-slate-50 border border-slate-100 border-b-0 rounded-t-xl px-4 py-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Wire Caption (AP)</label>
+                                <button
+                                  onClick={() => handleCopy(file.wireCaption, idx, 'wireCaption')}
+                                  className="flex items-center gap-1 text-[9px] font-black uppercase transition-colors p-1 rounded hover:bg-slate-200"
+                                  title="Copy Wire Caption"
+                                >
+                                  {copiedField?.fileIdx === idx && copiedField?.field === 'wireCaption' ? (
+                                    <span className="text-green-600 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg> COPIED</span>
+                                  ) : (
+                                    <span className="text-slate-400 hover:text-blue-600 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg> COPY</span>
+                                  )}
+                                </button>
+                              </div>
+                              <textarea
+                                value={file.wireCaption}
+                                onChange={(e) => updateField(idx, 'wireCaption', e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-100 rounded-b-xl px-4 py-3 text-xs font-bold text-slate-800 leading-normal focus:border-blue-700 outline-none transition-all resize-none h-40 focus:shadow-inner"
+                                placeholder="Concise AP wire caption..."
+                              />
                             </div>
-                            <textarea
-                              value={file.caption}
-                              onChange={(e) => updateField(idx, 'caption', e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-100 rounded-b-xl px-4 py-3 text-xs font-bold text-slate-800 leading-normal focus:border-blue-700 outline-none transition-all resize-none h-28 focus:shadow-inner"
-                              placeholder="Full journalistic caption..."
-                            />
+                            
+                            <div className="space-y-0">
+                              <div className="flex justify-between items-center bg-slate-50 border border-slate-100 border-b-0 rounded-t-xl px-4 py-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Archival Description</label>
+                                <button
+                                  onClick={() => handleCopy(file.archivalDescription, idx, 'archivalDescription')}
+                                  className="flex items-center gap-1 text-[9px] font-black uppercase transition-colors p-1 rounded hover:bg-slate-200"
+                                  title="Copy Archival Description"
+                                >
+                                  {copiedField?.fileIdx === idx && copiedField?.field === 'archivalDescription' ? (
+                                    <span className="text-green-600 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg> COPIED</span>
+                                  ) : (
+                                    <span className="text-slate-400 hover:text-blue-600 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg> COPY</span>
+                                  )}
+                                </button>
+                              </div>
+                              <textarea
+                                value={file.archivalDescription}
+                                onChange={(e) => updateField(idx, 'archivalDescription', e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-100 rounded-b-xl px-4 py-3 text-xs font-bold text-slate-800 leading-normal focus:border-blue-700 outline-none transition-all resize-none h-40 focus:shadow-inner"
+                                placeholder="Detailed historical and archival description..."
+                              />
+                            </div>
                           </div>
 
                           <div className="border border-slate-100 rounded-2xl overflow-hidden">

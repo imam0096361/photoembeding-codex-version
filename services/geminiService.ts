@@ -1,6 +1,5 @@
-
 import { GoogleGenAI } from "@google/genai";
-import { ProcessingResult, NewsCategory, CaptionStyle, CAPTION_STYLES, EventTemplate } from "../types";
+import { ProcessingResult, NewsCategory, EventTemplate } from "../types";
 import { findRelevantFigures, formatFiguresForPrompt } from "../data/knownFigures";
 import { getTemplateById } from "../data/eventTemplates";
 
@@ -14,7 +13,7 @@ import { getTemplateById } from "../data/eventTemplates";
  * - OCR text extraction
  * - Known figures database integration
  * - Event template support
- * - Multi-style caption generation
+ * - Dual-caption generation (AP Wire + Archival Description)
  * - Structured keyword generation (WHO/WHAT/WHERE/CONTEXT)
  */
 
@@ -83,12 +82,22 @@ Categorize this image into EXACTLY ONE news desk:
 EDITORIAL COMMENT (CAPTION) REQUIREMENTS
 ═══════════════════════════════════════════════════════════════════
 
-STYLE ENFORCEMENT:
-- Generate a comprehensive, professional caption based exactly on the requested style.
-- PAY STRICT ATTENTION to the "CAPTION STYLE OVERRIDE" in the user prompt.
-- If no style is specified, default to neutral, formal journalistic language.
-- Include date/location/significance if inferable or provided.
-- Do NOT use a period at the very end of the final sentence.
+Generate TWO distinct descriptions for this image:
+
+1. CAPTION_AP (Wire Caption)
+- Standard Associated Press wire style.
+- 1-3 sentences maximum.
+- Formal, objective, present tense.
+- Focus strictly on the immediate who, what, where, and when.
+
+2. CAPTION_ARCHIVE (Archival Description)
+- Detailed historical archive description.
+- 3-5 comprehensive sentences.
+- Think like a photojournalist and historian preserving context for the future.
+- Explain the significance of the event, identify key figures with historical titles.
+- Note exact locations, emotional mood, and visual composition narrative.
+
+Do NOT use a period at the very end of the final sentence for either caption.
 
 ═══════════════════════════════════════════════════════════════════
 SEARCH TAGS (KEYWORDS) REQUIREMENTS
@@ -129,7 +138,8 @@ OUTPUT FORMAT (STRICT - FOLLOW EXACTLY)
 TITLE: [Headline in title case, no period]
 CATEGORY: [One of: politics, sports, entertainment, business, national, international, lifestyle, crime, environment, technology]
 KEYWORDS: [Exactly 40 comma-separated lowercase tags]
-CAPTION: [Professional journalistic caption, no final period]
+CAPTION_AP: [Professional AP style wire caption, no final period]
+CAPTION_ARCHIVE: [Detailed historical archival description, no final period]
 EXTRACTED_TEXT: [Any readable text from signs/badges/banners, or "None visible"]
 IDENTIFIED_FIGURES: [List of identified people with roles, or "No specific individuals identified"]
 VERIFICATION: [Why you identified each person - evidence used]
@@ -144,7 +154,6 @@ CONFIDENCE: [Integer 0-100]
 If the image is too blurry or subject-less, respond ONLY: ERROR: Image content is insufficient for reliable metadata generation.`;
 
 export interface ProcessingOptions {
-  captionStyle?: CaptionStyle;
   templateId?: string;
   enableVerification?: boolean;
   highAccuracyMode?: boolean;
@@ -184,18 +193,6 @@ Suggested keywords to consider: ${template.suggestedKeywords.join(', ')}
     }
   }
 
-  // Apply caption style if not default
-  if (options.captionStyle && options.captionStyle !== 'ap') {
-    const style = CAPTION_STYLES.find(s => s.id === options.captionStyle);
-    if (style) {
-      styleSection = `
-CAPTION STYLE OVERRIDE:
-${style.promptModifier}
-`;
-    }
-  }
-
-  // Build the main prompt
   const prompt = userNotes
     ? `Analyze this photo for The Daily Star newsroom.
 
@@ -203,15 +200,13 @@ PHOTOGRAPHER'S SCENARIO/CONTEXT (USE AS PRIMARY FACTUAL ANCHOR):
 ${userNotes}
 ${figuresSection}
 ${templateSection}
-${styleSection}
 
-Generate professional journalistic metadata following the output format exactly.`
+Generate an intelligent title, 40 structured tags, an AP wire caption, and a detailed archival description based on the visual content. Follow the output format exactly.`
     : `Perform professional archival analysis on this photo for The Daily Star newsroom.
 ${figuresSection}
 ${templateSection}
-${styleSection}
 
-Generate an intelligent title, 40 structured tags, and a detailed newspaper-style editorial comment based on the visual content. Follow the output format exactly.`;
+Generate an intelligent title, 40 structured tags, an AP wire caption, and a detailed archival description based on the visual content. Follow the output format exactly.`;
 
   // Configure thinking budget based on mode
   const thinkingBudget = options.highAccuracyMode ? 4096 : 2048;
@@ -240,8 +235,9 @@ Generate an intelligent title, 40 structured tags, and a detailed newspaper-styl
   // Enhanced parsing with new fields
   const titleMatch = textOutput.match(/TITLE:\s*([^\n]*?)(?=\n|CATEGORY:|$)/i);
   const categoryMatch = textOutput.match(/CATEGORY:\s*([^\n]*?)(?=\n|KEYWORDS:|$)/i);
-  const keywordMatch = textOutput.match(/KEYWORDS:\s*([^\n]*?)(?=\n|CAPTION:|$)/i);
-  const captionMatch = textOutput.match(/CAPTION:\s*([\s\S]*?)(?=\n\n|EXTRACTED_TEXT:|IDENTIFIED_FIGURES:|$)/i);
+  const keywordMatch = textOutput.match(/KEYWORDS:\s*([^\n]*?)(?=\n|CAPTION_AP:|$)/i);
+  const captionApMatch = textOutput.match(/CAPTION_AP:\s*([\s\S]*?)(?=\n\n|CAPTION_ARCHIVE:|EXTRACTED_TEXT:|$)/i);
+  const captionArchiveMatch = textOutput.match(/CAPTION_ARCHIVE:\s*([\s\S]*?)(?=\n\n|EXTRACTED_TEXT:|IDENTIFIED_FIGURES:|$)/i);
   const extractedTextMatch = textOutput.match(/EXTRACTED_TEXT:\s*([^\n]*?)(?=\n|IDENTIFIED_FIGURES:|$)/i);
   const identifiedFiguresMatch = textOutput.match(/IDENTIFIED_FIGURES:\s*([\s\S]*?)(?=\n\n|VERIFICATION:|$)/i);
   const verificationMatch = textOutput.match(/VERIFICATION:\s*([\s\S]*?)(?=\n\n|QUALITY_|$)/i);
@@ -251,19 +247,14 @@ Generate an intelligent title, 40 structured tags, and a detailed newspaper-styl
   const printReadyMatch = textOutput.match(/QUALITY_PRINT_READY:\s*([^\n]*)/i);
   const confidenceMatch = textOutput.match(/CONFIDENCE:\s*(\d+)/i);
 
-  if (!keywordMatch || !captionMatch) {
-    // Fallback parsing for older format
-    const fallbackKeywords = textOutput.match(/KEYWORDS:\s*([\s\S]*?)(?=\n\n|CAPTION:|CONFIDENCE:|$)/i);
-    const fallbackCaption = textOutput.match(/CAPTION:\s*([\s\S]*?)(?=\n\n|CONFIDENCE:|$)/i);
-
-    if (!fallbackKeywords || !fallbackCaption) {
-      throw new Error('Metadata engine failed to parse output. Please retry.');
-    }
+  if (!keywordMatch || !captionApMatch || !captionArchiveMatch) {
+    throw new Error('Metadata engine failed to parse output fields (Missing AP or Archival caption). Please retry.');
   }
 
   const title = titleMatch ? titleMatch[1].trim() : 'Untitled Photo';
   const keywords = keywordMatch ? keywordMatch[1].trim().replace(/\n/g, '').replace(/\s+/g, '') : '';
-  const caption = captionMatch ? captionMatch[1].trim().replace(/\.$/, '') : '';
+  const wireCaption = captionApMatch ? captionApMatch[1].trim().replace(/\.$/, '') : '';
+  const archivalDescription = captionArchiveMatch ? captionArchiveMatch[1].trim().replace(/\.$/, '') : '';
   const confidenceScore = confidenceMatch ? parseInt(confidenceMatch[1], 10) : 0;
 
   // Parse category
@@ -309,7 +300,8 @@ Generate an intelligent title, 40 structured tags, and a detailed newspaper-styl
   return {
     title,
     keywords,
-    caption,
+    wireCaption,
+    archivalDescription,
     confidenceScore,
     category,
     extractedText: extractedText !== 'None visible' ? extractedText : undefined,
@@ -356,7 +348,8 @@ export async function verifyMetadata(
 Review this metadata that was generated for the attached image:
 
 TITLE: ${initialResult.title}
-CAPTION: ${initialResult.caption}
+AP CAPTION: ${initialResult.wireCaption}
+ARCHIVAL DESCRIPTION: ${initialResult.archivalDescription}
 IDENTIFIED FIGURES: ${initialResult.identifiedFigures?.join(', ') || 'None'}
 
 YOUR TASK:
