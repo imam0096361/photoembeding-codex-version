@@ -165,6 +165,7 @@ function createXmpPacket(metadata: any): string {
    <dc:creator><rdf:Seq><rdf:li>${esc(metadata.photographer)}</rdf:li></rdf:Seq></dc:creator>
    <dc:subject><rdf:Bag>${tags}</rdf:Bag></dc:subject>
    <dc:rights><rdf:Alt><rdf:li xml:lang="x-default">${esc(metadata.rights)}</rdf:li></rdf:Alt></dc:rights>
+   <xmpRights:Marked>True</xmpRights:Marked>
    <xmpRights:UsageTerms><rdf:Alt><rdf:li xml:lang="x-default">${esc(metadata.rights)}</rdf:li></rdf:Alt></xmpRights:UsageTerms>
   </rdf:Description>
  </rdf:RDF>
