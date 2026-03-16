@@ -39,6 +39,7 @@ export interface StockMetadata {
   priority?: Priority;
   embargoDate?: string;
   suggestedKeywords?: string[];
+  publicationStatus?: string;
 }
 
 export interface ProcessingResult {

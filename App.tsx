@@ -8,6 +8,23 @@ import piexif from "piexifjs";
 
 const CONCURRENCY_LIMIT = 3;
 
+export const PUBLICATION_STATUSES = [
+  'Unpublished',
+  'Published',
+  'Published Back Page',
+  'Published Business',
+  'Published City-Metro',
+  'Published Country-National',
+  'Published Dhaka-City-Metro',
+  'Published Editorial',
+  'Published Front Page',
+  'Published International-World',
+  'Published Page 2',
+  'Published Page 3',
+  'Published Page 4',
+  'Published Sports'
+];
+
 // Category colors for visual distinction
 const CATEGORY_COLORS: Record<NewsCategory, string> = {
   politics: 'bg-red-100 text-red-700 border-red-200',
@@ -136,6 +153,43 @@ const App: React.FC = () => {
           updated[index].rights = `© ${value} / The Daily Star`;
         }
       }
+      return updated;
+    });
+  };
+
+  const updatePublicationStatus = (fileIndex: number, newStatus: string) => {
+    setFiles(prev => {
+      const updated = [...prev];
+      if (!updated[fileIndex]) return updated;
+      
+      const file = updated[fileIndex];
+      const oldStatus = file.publicationStatus;
+      file.publicationStatus = newStatus;
+
+      let tags = file.keywords ? file.keywords.split(',').map(t => t.trim()).filter(Boolean) : [];
+      
+      if (oldStatus && tags.includes(oldStatus)) {
+        tags = tags.filter(t => t !== oldStatus);
+      }
+      
+      const isOldPublished = oldStatus?.startsWith('Published');
+      const isNewPublished = newStatus?.startsWith('Published');
+
+      if (isOldPublished && !isNewPublished) {
+        tags = tags.filter(t => t !== 'Print' && t !== 'Printed' && t !== 'Publish' && t !== 'Published');
+      }
+
+      if (newStatus && !tags.includes(newStatus)) {
+        tags.push(newStatus);
+      }
+      
+      if (isNewPublished) {
+        ['Print', 'Printed', 'Publish', 'Published'].forEach(tag => {
+          if (!tags.includes(tag)) tags.push(tag);
+        });
+      }
+
+      file.keywords = tags.join(',');
       return updated;
     });
   };
@@ -613,6 +667,14 @@ const App: React.FC = () => {
                                 {file.identifiedFigures.length} person(s) identified
                               </span>
                             )}
+                            <select
+                              value={file.publicationStatus || ''}
+                              onChange={(e) => updatePublicationStatus(idx, e.target.value)}
+                              className="px-2 py-1.5 rounded-lg text-[10px] uppercase font-black tracking-widest bg-violet-50 text-violet-700 border border-violet-200 outline-none cursor-pointer hover:bg-violet-100 transition-colors"
+                            >
+                              <option value="">Set Pub Status...</option>
+                              {PUBLICATION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
