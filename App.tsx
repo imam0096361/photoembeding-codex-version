@@ -83,7 +83,7 @@ const App: React.FC = () => {
       newFiles.push({
         filename: file.name,
         title: '',
-        keywords: '',
+        keywords: 'The Daily Star, Bangladesh, Bangladeshi',
         caption: '',
         photographer: initialPhotographer,
         creatorTool: 'TDS PhotoArchivePRO',
@@ -132,7 +132,6 @@ const App: React.FC = () => {
       if (updated[index]) {
         (updated[index] as any)[field] = value;
 
-        // Automatically sync copyright if photographer name changes
         if (field === 'photographer') {
           updated[index].rights = `© ${value} / The Daily Star`;
         }
@@ -322,7 +321,13 @@ const App: React.FC = () => {
         const updated = [...prev];
         if (updated[index]) {
           updated[index].title = result.title;
-          updated[index].keywords = result.keywords;
+          
+          // Ensure mandatory tags are clearly present
+          const baseTags = ['The Daily Star', 'Bangladesh', 'Bangladeshi'];
+          const generatedTags = result.keywords.split(',').map(t => t.trim()).filter(t => t.length > 0);
+          const mergedTags = Array.from(new Set([...baseTags, ...generatedTags]));
+          updated[index].keywords = mergedTags.join(',');
+          
           updated[index].caption = result.caption;
           updated[index].confidenceScore = result.confidenceScore;
           // NEW: Store enhanced metadata
@@ -668,7 +673,14 @@ const App: React.FC = () => {
                             {isAdvancedOpen && (
                               <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-white animate-in slide-in-from-top-1 duration-200">
                                 <div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">Creator Tool</label><input type="text" value={file.creatorTool} onChange={(e) => updateField(idx, 'creatorTool', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-100 rounded text-[10px] font-bold" /></div>
-                                <div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">Copyright / Rights</label><input type="text" value={file.rights} onChange={(e) => updateField(idx, 'rights', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-100 rounded text-[10px] font-bold" /></div>
+                                <div className="space-y-1">
+                                  <label className="text-[8px] font-black text-slate-400 uppercase">Copyright / Rights</label>
+                                  <input type="text" value={file.rights} onChange={(e) => updateField(idx, 'rights', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-100 rounded text-[10px] font-bold" />
+                                  <div className="flex gap-1 mt-1">
+                                    <button onClick={() => updateField(idx, 'rights', `© ${file.photographer} / The Daily Star`)} className="text-[8px] px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition-colors">Default</button>
+                                    <button onClick={() => updateField(idx, 'rights', '© 1995 The Daily Star')} className="text-[8px] px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition-colors">© 1995 The Daily Star</button>
+                                  </div>
+                                </div>
                                 <div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">Create Date</label><input type="datetime-local" value={file.createDate} onChange={(e) => updateField(idx, 'createDate', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-100 rounded text-[10px] font-bold" /></div>
                                 <div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">Modify Date</label><input type="datetime-local" value={file.modifyDate} onChange={(e) => updateField(idx, 'modifyDate', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-100 rounded text-[10px] font-bold" /></div>
                               </div>
