@@ -678,7 +678,9 @@ const App: React.FC = () => {
                                   <input type="text" value={file.rights} onChange={(e) => updateField(idx, 'rights', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-100 rounded text-[10px] font-bold" />
                                   <div className="flex gap-1 mt-1">
                                     <button onClick={() => updateField(idx, 'rights', `© ${file.photographer} / The Daily Star`)} className="text-[8px] px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition-colors">Default</button>
-                                    <button onClick={() => updateField(idx, 'rights', '© 1995 The Daily Star')} className="text-[8px] px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition-colors">© 1995 The Daily Star</button>
+                                    <button onClick={() => updateField(idx, 'rights', `© ${file.createDate?.split('-')[0] || new Date().getFullYear()} The Daily Star`)} className="text-[8px] px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition-colors">
+                                      © {file.createDate?.split('-')[0] || new Date().getFullYear()} The Daily Star
+                                    </button>
                                   </div>
                                 </div>
                                 <div className="space-y-1"><label className="text-[8px] font-black text-slate-400 uppercase">Create Date</label><input type="datetime-local" value={file.createDate} onChange={(e) => updateField(idx, 'createDate', e.target.value)} className="w-full px-2 py-1 bg-slate-50 border border-slate-100 rounded text-[10px] font-bold" /></div>
